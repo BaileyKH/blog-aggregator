@@ -8,11 +8,9 @@ export async function createUser(name: string) {
 }
 
 export async function getUsers() {
-    const [result] = await db.select({
-        nameField: users.name
-    }).from(users)
+    const result = await db.select().from(users)
 
-    // Left off: Trying to figure out best way to get currently logged in user
+    return result
 }
 
 export async function getUserByName(name: string) {

@@ -1,5 +1,5 @@
-import { setUser } from "./config.js";
-import { createUser, getUserByName, deleteAllUsers } from "./lib/db/queries/users.js";
+import { setUser, readConfig } from "./config.js";
+import { createUser, getUserByName, deleteAllUsers, getUsers } from "./lib/db/queries/users.js";
 
 export type CommandHandler = (cmdName: string, ...args: string[]) => Promise<void>;
 
@@ -55,6 +55,39 @@ export async function handlerReset(cmdName: string, ...args: string[]) {
     }
 
     process.exit(0)
+}
+
+export async function handlerAllUsers(cmdName: string, ...args: string[]) {
+    try{
+        const users = await getUsers()
+
+        const currentUser = readConfig()
+
+        if (users.length < 1) {
+            throw new Error("There are currently no users")
+        }
+        
+        for (let i = 0; i < users.length; i++) {
+        
+            if (users[i].name === currentUser.currentUserName) {
+                console.log(`* ${users[i].name} (current)`)
+            } else {
+                console.log(`* ${users[i].name}`)
+            }
+
+        }
+    } catch(err: unknown) {
+        if (err instanceof Error) {
+            console.error(err.message);
+        } else {
+            console.error("An unexpected error occurred", err);
+        }
+
+        process.exit(1)
+    }
+
+    process.exit(0)
+
 }
 
 export function registerCommand(registry: CommandsRegistry, cmdName: string, handler: CommandHandler) {
