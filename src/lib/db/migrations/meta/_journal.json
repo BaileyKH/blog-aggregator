@@ -8,6 +8,13 @@
       "when": 1781196262240,
       "tag": "0000_nappy_weapon_omega",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1781544060291,
+      "tag": "0001_unusual_vengeance",
+      "breakpoints": true
     }
   ]
 }

@@ -1,10 +1,13 @@
 import { setUser, readConfig } from "./config.js";
 import { createUser, getUserByName, deleteAllUsers, getUsers } from "./lib/db/queries/users.js";
+import { fetchFeed, printFeed } from "./rssConfig.js";
+import { createFeed, allFeeds } from "./lib/db/queries/feeds.js";
 
 export type CommandHandler = (cmdName: string, ...args: string[]) => Promise<void>;
 
 export type CommandsRegistry = Record<string, CommandHandler> 
 
+// User Handlers
 export async function handlerLogin(cmdName: string, ...args: string[]) {
     if (args.length < 1) {
         throw new Error(`${cmdName} Unsuccessful: Username Required`)
@@ -90,6 +93,52 @@ export async function handlerAllUsers(cmdName: string, ...args: string[]) {
 
 }
 
+// Feed Handlers
+export async function handlerFetchFeed(cmdName: string, ...args: string[]) {
+    const feed = await fetchFeed("https://www.wagslane.dev/index.xml")
+
+    console.log(JSON.stringify(feed, null, 2))
+}
+
+export async function handlerAddFeed(cmdName: string, ...args: string[]) {
+    if (args.length < 2) {
+        throw new Error(`${cmdName} Unsuccessful: Name and URL are required`)
+    }
+
+    try {
+        const name = args[0]
+        const url = args[1]
+        const currentUser = await readConfig()
+        const userInfo = await getUserByName(currentUser.currentUserName)
+
+        const createdFeed = await createFeed(name, url, userInfo.id)
+
+        return printFeed(createdFeed, userInfo)
+
+    } catch(err: unknown) {
+        if (err instanceof Error) {
+            console.error(err.message)
+        } else {
+            console.error("An unexpected error occurred", err);
+        }
+
+        process.exit(1)
+    }
+}
+
+export async function handlerAllFeeds(cmdName: string, ...args: string[]) {
+    const feeds = await allFeeds()
+
+    for (let i = 0; i < feeds.length; i++) {
+        console.log("-----------------------")
+        console.log("User: " + feeds[i].users.name)
+        console.log("Title: " + feeds[i].feeds.name)
+        console.log("URL: " + feeds[i].feeds.url)
+        console.log("-----------------------")
+    }
+}
+
+// Initial command setup
 export function registerCommand(registry: CommandsRegistry, cmdName: string, handler: CommandHandler) {
     registry[cmdName] = handler
 }
