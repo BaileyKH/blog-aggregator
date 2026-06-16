@@ -1,7 +1,8 @@
 import { setUser, readConfig } from "./config.js";
 import { createUser, getUserByName, deleteAllUsers, getUsers } from "./lib/db/queries/users.js";
 import { fetchFeed, printFeed } from "./rssConfig.js";
-import { createFeed, allFeeds } from "./lib/db/queries/feeds.js";
+import { createFeed, allFeeds, findFeedByUrl } from "./lib/db/queries/feeds.js";
+import { createFeedFollow, getFeedFollowsForUser, checkIfFollowing } from "./lib/db/queries/followFeeds.js";
 
 export type CommandHandler = (cmdName: string, ...args: string[]) => Promise<void>;
 
@@ -42,6 +43,9 @@ export async function handlerRegister(cmdName: string, ...args: string[]) {
 }
 
 export async function handlerReset(cmdName: string, ...args: string[]) {
+    if (args.length > 0) {
+        throw new Error("Too many arguments passed")
+    }
 
     try {
         await deleteAllUsers()
@@ -61,6 +65,10 @@ export async function handlerReset(cmdName: string, ...args: string[]) {
 }
 
 export async function handlerAllUsers(cmdName: string, ...args: string[]) {
+    if (args.length > 0) {
+        throw new Error("Too many arguments passed")
+    }
+
     try{
         const users = await getUsers()
 
@@ -95,13 +103,17 @@ export async function handlerAllUsers(cmdName: string, ...args: string[]) {
 
 // Feed Handlers
 export async function handlerFetchFeed(cmdName: string, ...args: string[]) {
+    if (args.length > 0) {
+        throw new Error("Too many arguments passed")
+    }
+
     const feed = await fetchFeed("https://www.wagslane.dev/index.xml")
 
     console.log(JSON.stringify(feed, null, 2))
 }
 
 export async function handlerAddFeed(cmdName: string, ...args: string[]) {
-    if (args.length < 2) {
+    if (args.length !== 2) {
         throw new Error(`${cmdName} Unsuccessful: Name and URL are required`)
     }
 
@@ -112,6 +124,7 @@ export async function handlerAddFeed(cmdName: string, ...args: string[]) {
         const userInfo = await getUserByName(currentUser.currentUserName)
 
         const createdFeed = await createFeed(name, url, userInfo.id)
+        await createFeedFollow(createdFeed.id, userInfo.id)
 
         return printFeed(createdFeed, userInfo)
 
@@ -127,6 +140,10 @@ export async function handlerAddFeed(cmdName: string, ...args: string[]) {
 }
 
 export async function handlerAllFeeds(cmdName: string, ...args: string[]) {
+    if (args.length > 0) {
+        throw new Error("Too many arguments passed")
+    }
+
     const feeds = await allFeeds()
 
     for (let i = 0; i < feeds.length; i++) {
@@ -135,6 +152,80 @@ export async function handlerAllFeeds(cmdName: string, ...args: string[]) {
         console.log("Title: " + feeds[i].feeds.name)
         console.log("URL: " + feeds[i].feeds.url)
         console.log("-----------------------")
+    }
+}
+
+// Follower Handlers
+export async function handlerFollow(cmdName: string, ...args: string[]) {
+    const currentUser = readConfig()
+
+    try {
+
+        if (args.length !== 1) {
+            throw new Error(`${cmdName} Unsuccessful: Feed URL required`)
+        }
+
+        const feedUrl = args[0]
+
+        const getFeed = await findFeedByUrl(feedUrl)
+
+        if (!getFeed) {
+            throw new Error("No feed with that url could be found. Please try again.")
+        }
+
+        const { id } = await getUserByName(currentUser.currentUserName)
+
+        const checkFollows = await checkIfFollowing(id, getFeed.id)
+
+        if (checkFollows.length > 0) {
+            throw new Error("You already follow this feed")
+        }
+
+        const followedFeed = await createFeedFollow(getFeed.id, id)
+
+        console.log("----------Now Following Feed----------")
+        console.log("Name: ", followedFeed.feedName)
+        console.log("User: ", followedFeed.userName)
+
+
+    } catch(err: unknown) {
+        if (err instanceof Error) {
+            console.error(err.message)
+            process.exit(1)
+        } else {
+            console.error("An unexpected error occurred", err);
+        }
+    }
+
+}
+
+export async function handlerFollowedFeeds(cmdName: string, ...args: string[]) {
+    const currentUser = readConfig()
+
+    if (args.length > 0) {
+        throw new Error("Too many arguments passed")
+    }
+
+    try {
+        const { id } = await getUserByName(currentUser.currentUserName)
+        const followedFeeds = await getFeedFollowsForUser(id)
+
+        if (followedFeeds.length < 1) {
+            throw new Error("User does not currently follow any feeds")
+        }
+
+        console.log(`-----Feeds for ${currentUser.currentUserName}-----`)
+        for (let i = 0; i < followedFeeds.length; i++){
+            console.log("Feed Name: " + followedFeeds[i].feedName)
+        }
+
+    } catch(err: unknown) {
+        if (err instanceof Error) {
+            console.error(err.message)
+            process.exit(1)
+        } else {
+            console.log("An unexpected error occurred", err)
+        }
     }
 }
 
