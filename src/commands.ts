@@ -1,8 +1,10 @@
+import { User } from "./lib/db/schema.js";
 import { setUser, readConfig } from "./config.js";
 import { createUser, getUserByName, deleteAllUsers, getUsers } from "./lib/db/queries/users.js";
 import { fetchFeed, printFeed } from "./rssConfig.js";
 import { createFeed, allFeeds, findFeedByUrl } from "./lib/db/queries/feeds.js";
-import { createFeedFollow, getFeedFollowsForUser, checkIfFollowing } from "./lib/db/queries/followFeeds.js";
+import { createFeedFollow, getFeedFollowsForUser, checkIfFollowing, unfollowFeed } from "./lib/db/queries/followFeeds.js";
+import { scrapeFeeds, parseDuration } from "./aggregate.js";
 
 export type CommandHandler = (cmdName: string, ...args: string[]) => Promise<void>;
 
@@ -103,40 +105,41 @@ export async function handlerAllUsers(cmdName: string, ...args: string[]) {
 
 // Feed Handlers
 export async function handlerFetchFeed(cmdName: string, ...args: string[]) {
-    if (args.length > 0) {
-        throw new Error("Too many arguments passed")
+    if (args.length !== 1) {
+        throw new Error("Pass only one argument, duration")
     }
 
-    const feed = await fetchFeed("https://www.wagslane.dev/index.xml")
+    const timeBetweenRequests = parseDuration(args[0]);
+    console.log(`Collecting feeds every ${args[0]}`);
 
-    console.log(JSON.stringify(feed, null, 2))
+    scrapeFeeds().catch((err) => console.error(err.message));
+
+    const interval = setInterval(() => {
+        scrapeFeeds().catch((err) => console.error(err.message));
+    }, timeBetweenRequests);
+
+    await new Promise<void>((resolve) => {
+        process.on("SIGINT", () => {
+            console.log("Shutting down feed aggregator...");
+            clearInterval(interval);
+            resolve();
+        });
+    });
 }
 
-export async function handlerAddFeed(cmdName: string, ...args: string[]) {
+export async function handlerAddFeed(cmdName: string, user: User, ...args: string[]) {
     if (args.length !== 2) {
         throw new Error(`${cmdName} Unsuccessful: Name and URL are required`)
     }
 
-    try {
-        const name = args[0]
-        const url = args[1]
-        const currentUser = await readConfig()
-        const userInfo = await getUserByName(currentUser.currentUserName)
+    const name = args[0]
+    const url = args[1]
 
-        const createdFeed = await createFeed(name, url, userInfo.id)
-        await createFeedFollow(createdFeed.id, userInfo.id)
+    const createdFeed = await createFeed(name, url, user.id)
+    await createFeedFollow(createdFeed.id, user.id)
 
-        return printFeed(createdFeed, userInfo)
+    return printFeed(createdFeed, user)
 
-    } catch(err: unknown) {
-        if (err instanceof Error) {
-            console.error(err.message)
-        } else {
-            console.error("An unexpected error occurred", err);
-        }
-
-        process.exit(1)
-    }
 }
 
 export async function handlerAllFeeds(cmdName: string, ...args: string[]) {
@@ -156,77 +159,75 @@ export async function handlerAllFeeds(cmdName: string, ...args: string[]) {
 }
 
 // Follower Handlers
-export async function handlerFollow(cmdName: string, ...args: string[]) {
-    const currentUser = readConfig()
+export async function handlerFollow(cmdName: string, user: User, ...args: string[]) {
 
-    try {
-
-        if (args.length !== 1) {
-            throw new Error(`${cmdName} Unsuccessful: Feed URL required`)
-        }
-
-        const feedUrl = args[0]
-
-        const getFeed = await findFeedByUrl(feedUrl)
-
-        if (!getFeed) {
-            throw new Error("No feed with that url could be found. Please try again.")
-        }
-
-        const { id } = await getUserByName(currentUser.currentUserName)
-
-        const checkFollows = await checkIfFollowing(id, getFeed.id)
-
-        if (checkFollows.length > 0) {
-            throw new Error("You already follow this feed")
-        }
-
-        const followedFeed = await createFeedFollow(getFeed.id, id)
-
-        console.log("----------Now Following Feed----------")
-        console.log("Name: ", followedFeed.feedName)
-        console.log("User: ", followedFeed.userName)
-
-
-    } catch(err: unknown) {
-        if (err instanceof Error) {
-            console.error(err.message)
-            process.exit(1)
-        } else {
-            console.error("An unexpected error occurred", err);
-        }
+    if (args.length !== 1) {
+        throw new Error(`${cmdName} Unsuccessful: Feed URL required`)
     }
+
+    const feedUrl = args[0]
+
+    const getFeed = await findFeedByUrl(feedUrl)
+
+    if (!getFeed) {
+        throw new Error("No feed with that url could be found. Please try again.")
+    }
+
+
+    const checkFollows = await checkIfFollowing(user.id, getFeed.id)
+
+    if (checkFollows.length > 0) {
+        throw new Error("You already follow this feed")
+    }
+
+    const followedFeed = await createFeedFollow(getFeed.id, user.id)
+
+    console.log("----------Now Following Feed----------")
+    console.log("Name: ", followedFeed.feedName)
+    console.log("User: ", followedFeed.userName)
 
 }
 
-export async function handlerFollowedFeeds(cmdName: string, ...args: string[]) {
-    const currentUser = readConfig()
+export async function handlerFollowedFeeds(cmdName: string, user: User,  ...args: string[]) {
 
     if (args.length > 0) {
         throw new Error("Too many arguments passed")
     }
 
-    try {
-        const { id } = await getUserByName(currentUser.currentUserName)
-        const followedFeeds = await getFeedFollowsForUser(id)
+    const followedFeeds = await getFeedFollowsForUser(user.id)
 
-        if (followedFeeds.length < 1) {
-            throw new Error("User does not currently follow any feeds")
-        }
-
-        console.log(`-----Feeds for ${currentUser.currentUserName}-----`)
-        for (let i = 0; i < followedFeeds.length; i++){
-            console.log("Feed Name: " + followedFeeds[i].feedName)
-        }
-
-    } catch(err: unknown) {
-        if (err instanceof Error) {
-            console.error(err.message)
-            process.exit(1)
-        } else {
-            console.log("An unexpected error occurred", err)
-        }
+    if (followedFeeds.length < 1) {
+        console.log("User does not currently follow any feeds")
+        return
     }
+
+    console.log(`-----Feeds for ${user.name}-----`)
+    for (let i = 0; i < followedFeeds.length; i++){
+        console.log("Feed Name: " + followedFeeds[i].feedName)
+    }
+
+}
+
+export async function handlerUnfollowFeed(cmdName: string, user: User, ...args: string[]) {
+    if (args.length !== 1) {
+        throw new Error("Please provide just the feed url")
+    }
+
+    const feed = await findFeedByUrl(args[0])
+
+    if (!feed) {
+        throw new Error("No feed found")
+    }
+    
+
+    const deletedFeed = await unfollowFeed(user.id, feed.id)
+
+    if (!deletedFeed) {
+        throw new Error("You did not follow this feed")
+    }
+
+    console.log("Feed has been Unfollowed")
+
 }
 
 // Initial command setup

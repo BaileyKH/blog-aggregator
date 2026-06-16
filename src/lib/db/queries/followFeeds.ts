@@ -55,3 +55,16 @@ export async function checkIfFollowing(userTId: string, feedTId: string) {
 
     return exists
 }
+
+export async function unfollowFeed(userTId: string, feedTId: string) {
+
+    const [result] = await db
+        .delete(feedFollows)
+        .where(and(
+            eq(feedFollows.userId, userTId),
+            eq(feedFollows.feedId, feedTId)
+        ))
+        .returning()
+
+    return result
+}
