@@ -29,6 +29,13 @@
       "when": 1781637209329,
       "tag": "0003_high_odin",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1781712307357,
+      "tag": "0004_thankful_firebrand",
+      "breakpoints": true
     }
   ]
 }
