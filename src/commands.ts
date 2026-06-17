@@ -3,6 +3,7 @@ import { setUser, readConfig } from "./config.js";
 import { createUser, getUserByName, deleteAllUsers, getUsers } from "./lib/db/queries/users.js";
 import { fetchFeed, printFeed } from "./rssConfig.js";
 import { createFeed, allFeeds, findFeedByUrl } from "./lib/db/queries/feeds.js";
+import { getPostsForUser } from "./lib/db/queries/posts.js";
 import { createFeedFollow, getFeedFollowsForUser, checkIfFollowing, unfollowFeed } from "./lib/db/queries/followFeeds.js";
 import { scrapeFeeds, parseDuration } from "./aggregate.js";
 
@@ -227,6 +228,29 @@ export async function handlerUnfollowFeed(cmdName: string, user: User, ...args: 
     }
 
     console.log("Feed has been Unfollowed")
+
+}
+
+// Post Handlers
+
+export async function handlerBrowse(cmdName: string, user: User, ...args: string[]) {
+    if (args.length > 1) {
+        throw new Error("Max One argument allowed")
+    }
+
+    let limit = args.length > 0 ? Number(args[0]) : 2
+
+    const posts = await getPostsForUser(user.id, limit)
+
+    console.log("--------Your Posts--------")
+
+    for (let i = 0; i < posts.length; i++) {
+        console.log("Name: ", posts[i].feedName)
+        console.log("Title: ", posts[i].title)
+        console.log("URL: ", posts[i].url)
+        console.log("Description: ", posts[i].description)
+        console.log("Published: ", posts[i].publishedAt)
+    }
 
 }
 

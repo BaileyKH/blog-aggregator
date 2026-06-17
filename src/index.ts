@@ -12,7 +12,8 @@ import {
   handlerAllFeeds, 
   handlerFollow,
   handlerFollowedFeeds,
-  handlerUnfollowFeed
+  handlerUnfollowFeed,
+  handlerBrowse
 } from "./commands.js";
 
 const registry: CommandsRegistry = {};
@@ -28,6 +29,7 @@ async function main() {
   registerCommand(registry, "follow", middlewareLoggedIn(handlerFollow));
   registerCommand(registry, "following", middlewareLoggedIn(handlerFollowedFeeds));
   registerCommand(registry, "unfollow", middlewareLoggedIn(handlerUnfollowFeed));
+  registerCommand(registry, "browse", middlewareLoggedIn(handlerBrowse));
 
   const commandArgs = process.argv.slice(2)
   const [cmdName, ...rest] = commandArgs

@@ -1,4 +1,5 @@
 import { getNextFeedToFetch, markFeedFetched } from "./lib/db/queries/feeds.js";
+import { createPost } from "./lib/db/queries/posts.js";
 import { fetchFeed } from "./rssConfig.js";
 
 export async function scrapeFeeds() {
@@ -19,7 +20,25 @@ export async function scrapeFeeds() {
     await markFeedFetched(nextFeed.id)
 
     for (const item of fetchedFeed.channel.item) {
-        console.log(item.title);
+        let published = new Date(item.pubDate)
+        const pubObj = {
+            url: item.link,
+            title: item.title,
+            description: item.description,
+            publishedAt: published,
+            feedId: nextFeed.id
+        }
+
+        try {
+            await createPost(pubObj)
+        } catch(err: unknown) {
+            if (err instanceof Error) {
+                console.error(err.message)
+            } else {
+                console.log("Unknown error occured", err)
+            }
+        }
+
     }
 
 }
